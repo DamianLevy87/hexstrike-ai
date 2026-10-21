@@ -39,7 +39,7 @@ import shutil
 import venv
 import zipfile
 from pathlib import Path
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template, send_from_directory
 import psutil
 import signal
 import requests
@@ -9057,7 +9057,13 @@ file_manager = FileOperationsManager()
 
 @app.route("/", methods=["GET"])
 def index():
-    """Root endpoint - service info and endpoint discovery"""
+    """Root endpoint - serve the web UI dashboard"""
+    return render_template("index.html")
+
+@app.route("/api", methods=["GET"])
+@app.route("/api/", methods=["GET"])
+def api_index():
+    """API service info and endpoint discovery (JSON)"""
     endpoints = sorted(
         str(rule)
         for rule in app.url_map.iter_rules()
@@ -9073,6 +9079,18 @@ def index():
         "endpoints_count": len(endpoints),
         "endpoints": endpoints
     })
+
+@app.route("/favicon.ico", methods=["GET"])
+def favicon():
+    """Favicon - reuse the project logo"""
+    return send_from_directory(
+        os.path.join(app.root_path, "assets"), "hexstrike-logo.png", mimetype="image/png"
+    )
+
+@app.route("/assets/<path:filename>", methods=["GET"])
+def serve_assets(filename):
+    """Serve project assets (logos, banners) for the web UI"""
+    return send_from_directory(os.path.join(app.root_path, "assets"), filename)
 
 @app.route("/health", methods=["GET"])
 def health_check():
