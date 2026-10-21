@@ -9064,11 +9064,13 @@ def index():
 @app.route("/api/", methods=["GET"])
 def api_index():
     """API service info and endpoint discovery (JSON)"""
-    endpoints = sorted(
-        str(rule)
-        for rule in app.url_map.iter_rules()
-        if rule.endpoint != "static" and not str(rule).startswith("/static")
-    )
+    routes = []
+    for rule in app.url_map.iter_rules():
+        if rule.endpoint == "static" or str(rule).startswith("/static"):
+            continue
+        methods = sorted(m for m in rule.methods - {"HEAD", "OPTIONS"})
+        routes.append({"path": str(rule), "methods": methods})
+    routes.sort(key=lambda r: r["path"])
 
     return jsonify({
         "name": "HexStrike AI Tools API Server",
@@ -9076,8 +9078,9 @@ def api_index():
         "status": "running",
         "port": API_PORT,
         "message": "HexStrike AI API is running. See /health for tool status.",
-        "endpoints_count": len(endpoints),
-        "endpoints": endpoints
+        "endpoints_count": len(routes),
+        "endpoints": [r["path"] for r in routes],
+        "routes": routes
     })
 
 @app.route("/favicon.ico", methods=["GET"])

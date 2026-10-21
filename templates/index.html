@@ -59,7 +59,10 @@ button.primary{border-color:#5c1d1d;background:#1c0f10;color:#ffb3b3}
 .grp{margin:14px 0 4px;color:var(--blue);font-size:12px;letter-spacing:1px;text-transform:uppercase}
 .ep{display:flex;align-items:center;gap:10px;padding:4px 6px;border-radius:6px;font-size:12.5px}
 .ep:hover{background:var(--panel2)}
-.ep .m{color:var(--green);width:38px;flex:none}
+.ep .m{flex:none;min-width:44px;color:var(--green)}
+.ep .m.m-post{color:var(--blue)}
+.ep .m.m-delete{color:var(--amber)}
+.ep .m.m-put,.ep .m.m-patch{color:var(--dim)}
 .ep .p{flex:1;word-break:break-all;cursor:pointer;color:var(--fg)}
 .ep .p:hover{color:#fff;text-decoration:underline}
 .ep .run{padding:3px 10px;font-size:11px}
@@ -185,11 +188,13 @@ async function loadProcs() {
 }
 
 /* ---------- api explorer ---------- */
-let ENDPOINTS = [];
+let ENDPOINTS = []; // [{path, methods:[..]}]
 async function loadEndpoints() {
   try {
     const d = await jget('/api');
-    ENDPOINTS = d.endpoints || [];
+    ENDPOINTS = (d.routes && d.routes.length)
+      ? d.routes
+      : (d.endpoints || []).map(p => ({ path: p, methods: ['GET'] }));
     $('#epCount').textContent = d.endpoints_count + ' routes';
     renderEndpoints();
   } catch (e) {
@@ -198,21 +203,22 @@ async function loadEndpoints() {
 }
 function renderEndpoints() {
   const q = $('#q').value.trim().toLowerCase();
-  const hits = ENDPOINTS.filter(p => !q || p.toLowerCase().includes(q));
+  const hits = ENDPOINTS.filter(r => !q || r.path.toLowerCase().includes(q));
   const groups = {};
-  for (const p of hits) {
-    const parts = p.split('/').filter(Boolean);
+  for (const r of hits) {
+    const parts = r.path.split('/').filter(Boolean);
     const g = parts[0] === 'api' ? '/' + (parts[1] || 'api') : '/';
-    (groups[g] = groups[g] || []).push(p);
+    (groups[g] = groups[g] || []).push(r);
   }
   $('#eplist').innerHTML = Object.keys(groups).sort().map(g =>
     `<div class="grp">${esc(g)} <span style="color:var(--dim)">(${groups[g].length})</span></div>` +
-    groups[g].map(p => {
-      const hasParams = p.includes('<');
-      return `<div class="ep"><span class="m">GET</span>
-        <span class="p" data-p="${esc(p)}">${esc(p)}</span>
+    groups[g].map(r => {
+      const hasParams = r.path.includes('<');
+      return `<div class="ep">` +
+        r.methods.map(m => `<span class="m m-${esc(m.toLowerCase())}">${esc(m)}</span>`).join('') +
+        `<span class="p" data-p="${esc(r.path)}">${esc(r.path)}</span>
         ${hasParams ? '<span class="params">params</span>' : ''}
-        <button class="run" data-p="${esc(p)}">run</button></div>`;
+        <button class="run" data-p="${esc(r.path)}">run</button></div>`;
     }).join('')
   ).join('') || '<div class="empty">no endpoints match</div>';
 }
@@ -234,14 +240,28 @@ async function runEndpoint(path) {
     });
     if (cancelled) return;
   }
+  // pick the method: prefer GET when a route offers both, else its first method
+  const route = ENDPOINTS.find(r => r.path === path);
+  const methods = route ? route.methods : ['GET'];
+  const method = methods.includes('GET') ? 'GET' : methods[0];
+  let body;
+  if (method !== 'GET') {
+    body = prompt(`JSON request body for ${method} ${path}:`, '{}');
+    if (body === null) return;
+  }
   const box = $('#resp'); box.style.display = 'block';
-  $('#respUrl').textContent = 'GET ' + url;
+  $('#respUrl').textContent = method + ' ' + url;
   $('#respCode').textContent = '…'; $('#respCode').className = 'pill warn';
   $('#respOut').textContent = 'loading…'; $('#respMs').textContent = '';
   box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   const t0 = performance.now();
   try {
-    const r = await fetch(url, { headers: { Accept: 'application/json' } });
+    const opts = { method, headers: { Accept: 'application/json' } };
+    if (method !== 'GET') {
+      opts.headers['Content-Type'] = 'application/json';
+      opts.body = body || '{}';
+    }
+    const r = await fetch(url, opts);
     const text = await r.text();
     let out = text;
     try { out = JSON.stringify(JSON.parse(text), null, 2); } catch (_) {}

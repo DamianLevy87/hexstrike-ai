@@ -215,9 +215,12 @@ curl -X POST http://localhost:8888/api/intelligence/analyze-target \
 ### Web UI
 
 Open `http://localhost:8888/` in a browser for the console dashboard: live
-process monitor, toolchain status, and an API explorer that can call any
-endpoint and show its response. The JSON service index that used to live at
-`/` is now served at `/api` (and `/api/`).
+process monitor, toolchain status, and a method-aware API explorer that can
+call any endpoint (path params and JSON bodies prompted for) and show its
+response. The JSON service index that used to live at `/` is now served at
+`/api` (and `/api/`), including each route's allowed HTTP methods.
+
+<img src="assets/webui-dashboard.png" alt="HexStrike Web UI dashboard" width="85%"/>
 
 ---
 
