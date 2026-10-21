@@ -235,6 +235,51 @@ response. The JSON service index that used to live at `/` is now served at
 
 <img src="assets/webui-dashboard.png" alt="HexStrike Web UI dashboard" width="85%"/>
 
+### Orchestration: skills, agents, tool chains & workflows
+
+The server ships a composable orchestration layer (also exposed as MCP
+tools) so AI clients can plan and drive multi-step engagements instead of
+single tool calls:
+
+- **Tool chains** — named, ordered sequences of API tool calls with
+  parameter templating (`{target}`, `{param.X}`). Defaults: `recon-passive`,
+  `port-scan`, `web-content-discovery`, `vuln-scan`, `web-audit`,
+  `cve-hunt`, `container-audit`, `credential-audit`, `full-recon`.
+- **Skills** — reusable capability bundles (tools + guidance):
+  `network-recon`, `web-application-security`, `vulnerability-assessment`,
+  `osint-intelligence`, `binary-exploitation`, `cloud-container-security`.
+- **Agents & subagents** — profiles owning skills and chains, with system
+  prompts: `recon-specialist`, `web-vuln-hunter`, `exploitation-specialist`,
+  `reporting-analyst`, plus delegation subagents (`subdomain-enumerator`,
+  `port-scanner`, `content-discovery`, `cve-scanner`).
+- **Workflows** — phased pipelines with success gating, run asynchronously
+  and tracked by run id: `full-pentest`, `web-app-audit`, `quick-triage`.
+
+```bash
+# discover
+curl -k https://localhost:8888/api/orchestration
+curl -k https://localhost:8888/api/orchestration/chains
+
+# run a chain synchronously (returns every step's result)
+curl -k -X POST https://localhost:8888/api/orchestration/chains/port-scan/run \
+  -H "Content-Type: application/json" -d '{"target": "127.0.0.1"}'
+
+# start a workflow (async) and poll it
+curl -k -X POST https://localhost:8888/api/orchestration/workflows/quick-triage/run \
+  -H "Content-Type: application/json" -d '{"target": "https://example.com"}'
+curl -k https://localhost:8888/api/orchestration/runs/<run_id>
+```
+
+MCP clients get the same layer as tools: `list_skills`, `get_skill`,
+`list_agents`, `get_agent`, `list_tool_chains`, `get_tool_chain`,
+`run_tool_chain`, `list_workflows`, `run_workflow`, `run_agent`,
+`get_orchestration_status`, `list_orchestration_runs`,
+`cancel_orchestration_run`.
+
+Extend or override any definition without code changes by dropping JSON
+files into `~/.hexstrike/orchestration/`
+(`{"kind": "chain|skill|agent|workflow", "name": "...", ...}`).
+
 ---
 
 ## AI Client Integration Setup

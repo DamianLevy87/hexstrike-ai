@@ -17328,6 +17328,124 @@ def get_alternative_tools():
 # Create the banner after all classes are defined
 BANNER = ModernVisualEngine.create_banner()
 
+# ============================================================================
+# ORCHESTRATION API (tool chains, skills, agents, workflows)
+# ============================================================================
+from hexstrike_orchestration import OrchestrationEngine
+
+orchestrator = OrchestrationEngine()
+
+def _orch_base_url():
+    """Call back into this server using the URL the client used."""
+    return request.url_root.rstrip("/")
+
+@app.route("/api/orchestration", methods=["GET"])
+def orchestration_index():
+    """Overview of the orchestration layer (skills/agents/chains/workflows)."""
+    return jsonify(orchestrator.overview())
+
+@app.route("/api/orchestration/skills", methods=["GET"])
+def orchestration_skills():
+    """List available skills."""
+    return jsonify(orchestrator.list_skills())
+
+@app.route("/api/orchestration/skills/<skill_name>", methods=["GET"])
+def orchestration_skill(skill_name):
+    """Get one skill with its tools and guidance."""
+    result = orchestrator.get_skill(skill_name)
+    return jsonify(result), (200 if result.get("success") else 404)
+
+@app.route("/api/orchestration/agents", methods=["GET"])
+def orchestration_agents():
+    """List agent and subagent profiles."""
+    return jsonify(orchestrator.list_agents())
+
+@app.route("/api/orchestration/agents/<agent_name>", methods=["GET"])
+def orchestration_agent(agent_name):
+    """Get one agent profile (skills, chains, subagents, system prompt)."""
+    result = orchestrator.get_agent(agent_name)
+    return jsonify(result), (200 if result.get("success") else 404)
+
+@app.route("/api/orchestration/agents/<agent_name>/run", methods=["POST"])
+def orchestration_agent_run(agent_name):
+    """Start an agent run (async): executes the agent's chains in order."""
+    params = request.json or {}
+    target = params.get("target", "")
+    if not target:
+        return jsonify({"error": "Target parameter is required"}), 400
+    result = orchestrator.start_agent(agent_name, target, _orch_base_url())
+    return jsonify(result), (200 if result.get("success") else 404)
+
+@app.route("/api/orchestration/chains", methods=["GET"])
+def orchestration_chains():
+    """List tool chains."""
+    return jsonify(orchestrator.list_chains())
+
+@app.route("/api/orchestration/chains/<chain_name>", methods=["GET"])
+def orchestration_chain(chain_name):
+    """Get one tool chain definition (steps and parameters)."""
+    result = orchestrator.get_chain(chain_name)
+    return jsonify(result), (200 if result.get("success") else 404)
+
+@app.route("/api/orchestration/chains/<chain_name>/run", methods=["POST"])
+def orchestration_chain_run(chain_name):
+    """Run a tool chain synchronously; returns all step results."""
+    result = orchestrator.get_chain(chain_name)
+    if not result.get("success"):
+        return jsonify(result), 404
+    params = request.json or {}
+    target = params.get("target", "")
+    if not target:
+        return jsonify({"error": "Target parameter is required"}), 400
+    missing = [p for p in result.get("requires_params", [])
+               if not (params.get("params") or {}).get(p)]
+    if missing:
+        return jsonify({
+            "error": f"Chain '{chain_name}' requires extra params: "
+                     f"{', '.join(missing)}",
+            "requires_params": result.get("requires_params", [])
+        }), 400
+    return jsonify(orchestrator.run_chain(chain_name, target, _orch_base_url(),
+                                          params.get("params")))
+
+@app.route("/api/orchestration/workflows", methods=["GET"])
+def orchestration_workflows():
+    """List workflows."""
+    return jsonify(orchestrator.list_workflows())
+
+@app.route("/api/orchestration/workflows/<workflow_name>", methods=["GET"])
+def orchestration_workflow(workflow_name):
+    """Get one workflow definition (phases and gating)."""
+    result = orchestrator.get_workflow(workflow_name)
+    return jsonify(result), (200 if result.get("success") else 404)
+
+@app.route("/api/orchestration/workflows/<workflow_name>/run", methods=["POST"])
+def orchestration_workflow_run(workflow_name):
+    """Start a workflow run (async); poll /api/orchestration/runs/<id>."""
+    params = request.json or {}
+    target = params.get("target", "")
+    if not target:
+        return jsonify({"error": "Target parameter is required"}), 400
+    result = orchestrator.start_workflow(workflow_name, target, _orch_base_url())
+    return jsonify(result), (200 if result.get("success") else 404)
+
+@app.route("/api/orchestration/runs", methods=["GET"])
+def orchestration_runs():
+    """List recent orchestration runs."""
+    return jsonify(orchestrator.list_runs())
+
+@app.route("/api/orchestration/runs/<run_id>", methods=["GET"])
+def orchestration_run(run_id):
+    """Status and results of one orchestration run."""
+    result = orchestrator.get_run(run_id)
+    return jsonify(result), (200 if result.get("success") else 404)
+
+@app.route("/api/orchestration/runs/<run_id>/cancel", methods=["POST"])
+def orchestration_run_cancel(run_id):
+    """Request cancellation of a running orchestration run."""
+    result = orchestrator.cancel_run(run_id)
+    return jsonify(result), (200 if result.get("success") else 404)
+
 if __name__ == "__main__":
     # Display the beautiful new banner
     print(BANNER)
