@@ -98,6 +98,33 @@ app.config['JSON_SORT_KEYS'] = False
 API_PORT = int(os.environ.get('HEXSTRIKE_PORT', 8888))
 API_HOST = os.environ.get('HEXSTRIKE_HOST', '127.0.0.1')
 
+# TLS Configuration
+# When both a certificate and key are available, the server serves HTTPS.
+# Point HEXSTRIKE_SSL_CERT / HEXSTRIKE_SSL_KEY at your own PEM pair, or drop
+# server.crt / server.key into ~/.hexstrike/certs/. Set HEXSTRIKE_SSL=0 to force plain HTTP.
+_SSL_HOME = os.path.expanduser('~/.hexstrike/certs')
+SSL_ENABLED = os.environ.get('HEXSTRIKE_SSL', '1') not in ('0', 'false', 'no', '')
+SSL_CERT = os.environ.get('HEXSTRIKE_SSL_CERT', os.path.join(_SSL_HOME, 'server.crt'))
+SSL_KEY = os.environ.get('HEXSTRIKE_SSL_KEY', os.path.join(_SSL_HOME, 'server.key'))
+
+def _ssl_context():
+    """Return an SSLContext for HTTPS, or None to serve plain HTTP."""
+    if not SSL_ENABLED:
+        return None
+    if os.path.isfile(SSL_CERT) and os.path.isfile(SSL_KEY):
+        try:
+            import ssl
+            ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+            ctx.load_cert_chain(SSL_CERT, SSL_KEY)
+            return ctx
+        except Exception as e:
+            logger.warning(f"⚠️  TLS setup failed ({e}); falling back to plain HTTP")
+            return None
+    logger.warning("⚠️  TLS enabled but cert/key not found "
+                   f"({SSL_CERT}, {SSL_KEY}); serving plain HTTP")
+    return None
+
 # ============================================================================
 # MODERN VISUAL ENGINE (v2.0 ENHANCEMENT)
 # ============================================================================
@@ -6673,6 +6700,7 @@ class HexStrikeCache:
         self.max_size = max_size
         self.ttl = ttl
         self.stats = {"hits": 0, "misses": 0, "evictions": 0}
+        self.lock = threading.Lock()
 
     def _generate_key(self, command: str, params: Dict[str, Any]) -> str:
         """Generate cache key from command and parameters"""
@@ -6687,48 +6715,51 @@ class HexStrikeCache:
         """Get cached result if available and not expired"""
         key = self._generate_key(command, params)
 
-        if key in self.cache:
-            timestamp, data = self.cache[key]
-            if not self._is_expired(timestamp):
-                # Move to end (most recently used)
-                self.cache.move_to_end(key)
-                self.stats["hits"] += 1
-                logger.info(f"💾 Cache HIT for command: {command}")
-                return data
-            else:
-                # Remove expired entry
-                del self.cache[key]
+        with self.lock:
+            if key in self.cache:
+                timestamp, data = self.cache[key]
+                if not self._is_expired(timestamp):
+                    # Move to end (most recently used)
+                    self.cache.move_to_end(key)
+                    self.stats["hits"] += 1
+                    logger.info(f"💾 Cache HIT for command: {command}")
+                    return data
+                else:
+                    # Remove expired entry
+                    del self.cache[key]
 
-        self.stats["misses"] += 1
-        logger.info(f"🔍 Cache MISS for command: {command}")
-        return None
+            self.stats["misses"] += 1
+            logger.info(f"🔍 Cache MISS for command: {command}")
+            return None
 
     def set(self, command: str, params: Dict[str, Any], result: Dict[str, Any]):
         """Store result in cache"""
         key = self._generate_key(command, params)
 
-        # Remove oldest entries if cache is full
-        while len(self.cache) >= self.max_size:
-            oldest_key = next(iter(self.cache))
-            del self.cache[oldest_key]
-            self.stats["evictions"] += 1
+        with self.lock:
+            # Remove oldest entries if cache is full
+            while len(self.cache) >= self.max_size:
+                oldest_key = next(iter(self.cache))
+                del self.cache[oldest_key]
+                self.stats["evictions"] += 1
 
-        self.cache[key] = (time.time(), result)
-        logger.info(f"💾 Cached result for command: {command}")
+            self.cache[key] = (time.time(), result)
+            logger.info(f"💾 Cached result for command: {command}")
 
     def get_stats(self) -> Dict[str, Any]:
         """Get cache statistics"""
-        total_requests = self.stats["hits"] + self.stats["misses"]
-        hit_rate = (self.stats["hits"] / total_requests * 100) if total_requests > 0 else 0
+        with self.lock:
+            total_requests = self.stats["hits"] + self.stats["misses"]
+            hit_rate = (self.stats["hits"] / total_requests * 100) if total_requests > 0 else 0
 
-        return {
-            "size": len(self.cache),
-            "max_size": self.max_size,
-            "hit_rate": f"{hit_rate:.1f}%",
-            "hits": self.stats["hits"],
-            "misses": self.stats["misses"],
-            "evictions": self.stats["evictions"]
-        }
+            return {
+                "size": len(self.cache),
+                "max_size": self.max_size,
+                "hit_rate": f"{hit_rate:.1f}%",
+                "hits": self.stats["hits"],
+                "misses": self.stats["misses"],
+                "evictions": self.stats["evictions"]
+            }
 
 # Global cache instance
 cache = HexStrikeCache()
@@ -6744,15 +6775,17 @@ class TelemetryCollector:
             "total_execution_time": 0.0,
             "start_time": time.time()
         }
+        self.lock = threading.Lock()
 
     def record_execution(self, success: bool, execution_time: float):
         """Record command execution statistics"""
-        self.stats["commands_executed"] += 1
-        if success:
-            self.stats["successful_commands"] += 1
-        else:
-            self.stats["failed_commands"] += 1
-        self.stats["total_execution_time"] += execution_time
+        with self.lock:
+            self.stats["commands_executed"] += 1
+            if success:
+                self.stats["successful_commands"] += 1
+            else:
+                self.stats["failed_commands"] += 1
+            self.stats["total_execution_time"] += execution_time
 
     def get_system_metrics(self) -> Dict[str, Any]:
         """Get current system metrics"""
@@ -6765,13 +6798,15 @@ class TelemetryCollector:
 
     def get_stats(self) -> Dict[str, Any]:
         """Get telemetry statistics"""
-        uptime = time.time() - self.stats["start_time"]
-        success_rate = (self.stats["successful_commands"] / self.stats["commands_executed"] * 100) if self.stats["commands_executed"] > 0 else 0
-        avg_execution_time = (self.stats["total_execution_time"] / self.stats["commands_executed"]) if self.stats["commands_executed"] > 0 else 0
+        with self.lock:
+            uptime = time.time() - self.stats["start_time"]
+            commands_executed = self.stats["commands_executed"]
+            success_rate = (self.stats["successful_commands"] / commands_executed * 100) if commands_executed > 0 else 0
+            avg_execution_time = (self.stats["total_execution_time"] / commands_executed) if commands_executed > 0 else 0
 
         return {
             "uptime_seconds": uptime,
-            "commands_executed": self.stats["commands_executed"],
+            "commands_executed": commands_executed,
             "success_rate": f"{success_rate:.1f}%",
             "average_execution_time": f"{avg_execution_time:.2f}s",
             "system_metrics": self.get_system_metrics()
@@ -17288,12 +17323,16 @@ if __name__ == "__main__":
     if args.port != API_PORT:
         API_PORT = args.port
 
+    ssl_ctx = _ssl_context()
+    scheme = "https" if ssl_ctx else "http"
+
     # Enhanced startup messages with beautiful formatting
     startup_info = f"""
 {ModernVisualEngine.COLORS['MATRIX_GREEN']}{ModernVisualEngine.COLORS['BOLD']}╭─────────────────────────────────────────────────────────────────────────────╮{ModernVisualEngine.COLORS['RESET']}
 {ModernVisualEngine.COLORS['BOLD']}│{ModernVisualEngine.COLORS['RESET']} {ModernVisualEngine.COLORS['NEON_BLUE']}🚀 Starting HexStrike AI Tools API Server{ModernVisualEngine.COLORS['RESET']}
 {ModernVisualEngine.COLORS['BOLD']}├─────────────────────────────────────────────────────────────────────────────┤{ModernVisualEngine.COLORS['RESET']}
 {ModernVisualEngine.COLORS['BOLD']}│{ModernVisualEngine.COLORS['RESET']} {ModernVisualEngine.COLORS['CYBER_ORANGE']}🌐 Port:{ModernVisualEngine.COLORS['RESET']} {API_PORT}
+{ModernVisualEngine.COLORS['BOLD']}│{ModernVisualEngine.COLORS['RESET']} {ModernVisualEngine.COLORS['CYBER_ORANGE']}🔒 TLS:{ModernVisualEngine.COLORS['RESET']} {'Enabled (' + scheme + '://' if ssl_ctx else 'Disabled (plain http)'}
 {ModernVisualEngine.COLORS['BOLD']}│{ModernVisualEngine.COLORS['RESET']} {ModernVisualEngine.COLORS['WARNING']}🔧 Debug Mode:{ModernVisualEngine.COLORS['RESET']} {DEBUG_MODE}
 {ModernVisualEngine.COLORS['BOLD']}│{ModernVisualEngine.COLORS['RESET']} {ModernVisualEngine.COLORS['ELECTRIC_PURPLE']}💾 Cache Size:{ModernVisualEngine.COLORS['RESET']} {CACHE_SIZE} | TTL: {CACHE_TTL}s
 {ModernVisualEngine.COLORS['BOLD']}│{ModernVisualEngine.COLORS['RESET']} {ModernVisualEngine.COLORS['TERMINAL_GRAY']}⏱️  Command Timeout:{ModernVisualEngine.COLORS['RESET']} {COMMAND_TIMEOUT}s
@@ -17305,4 +17344,4 @@ if __name__ == "__main__":
         if line.strip():
             logger.info(line)
 
-    app.run(host="0.0.0.0", port=API_PORT, debug=DEBUG_MODE)
+    app.run(host="0.0.0.0", port=API_PORT, debug=DEBUG_MODE, ssl_context=ssl_ctx, threaded=True)
