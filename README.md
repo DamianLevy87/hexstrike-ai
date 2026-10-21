@@ -280,6 +280,30 @@ Extend or override any definition without code changes by dropping JSON
 files into `~/.hexstrike/orchestration/`
 (`{"kind": "chain|skill|agent|workflow", "name": "...", ...}`).
 
+### OpenCode-native agents
+
+This repo ships OpenCode agent profiles under `.opencode/agents/` that drive the
+orchestration MCP tools above (`get_skill`, `run_tool_chain`, `run_agent`,
+`run_workflow`, `get_orchestration_status`, `cancel_orchestration_run`):
+
+- `recon-specialist` — passive-first attack-surface mapping (domain/IP); delegates to `subdomain-enumerator` and `port-scanner`.
+- `web-vuln-hunter` — web testing against a URL (discovery, audit, vuln/CVE scans); delegates to `content-discovery` and `cve-scanner`.
+- `exploitation-specialist` — binary analysis and safe, least-destructive exploit validation.
+- `reporting-analyst` — aggregates orchestration runs into severity-ranked findings with evidence.
+- `subdomain-enumerator` *(subagent)* — passive subdomain/historical-URL discovery (`recon-passive`).
+- `port-scanner` *(subagent)* — port/service discovery on an IP or hostname (`port-scan`).
+- `content-discovery` *(subagent)* — hidden path discovery on a URL (`web-content-discovery`).
+- `cve-scanner` *(subagent)* — nuclei CVE/vuln template scans on a URL (`cve-hunt`, `vuln-scan`).
+
+They require the `hexstrike-ai` MCP server to be registered in OpenCode — use the
+sample `hexstrike-ai-mcp.json` config at the repo root (same shape as the AI
+client integration examples below).
+
+```text
+Select `web-vuln-hunter` as the session agent, then: run_workflow("web-app-audit", "https://example.com", wait=false)
+From any session: "Use the port-scanner subagent to scan 192.0.2.10."
+```
+
 ---
 
 ## AI Client Integration Setup
