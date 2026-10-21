@@ -3,12 +3,12 @@
     "hexstrike-ai": {
       "command": "python3",
       "args": [
-        "/home/test/Documents/hexstrike-ai/hexstrike_mcp.py",
+        "/path/hexstrike_mcp.py",
         "--server",
-        "https://127.0.0.1:8888"
+        "https://IPADDRESS:8888"
       ],
       "env": {
-        "REQUESTS_CA_BUNDLE": "/home/test/.hexstrike/certs/server.crt"
+        "REQUESTS_CA_BUNDLE": "/path/to/server.crt"
       },
       "description": "HexStrike AI v6.0 - Advanced Cybersecurity Automation Platform. Turn off alwaysAllow if you dont want autonomous execution!",
       "timeout": 300,

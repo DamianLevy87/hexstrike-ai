@@ -212,9 +212,22 @@ curl -X POST http://localhost:8888/api/intelligence/analyze-target \
   -d '{"target": "example.com", "analysis_type": "comprehensive"}'
 ```
 
+> **TLS:** the server listens on **HTTPS** when a certificate/key pair is
+> found at `~/.hexstrike/certs/server.{crt,key}` (or the paths given via
+> `HEXSTRIKE_SSL_CERT` / `HEXSTRIKE_SSL_KEY`); with no certificate present it
+> serves plain HTTP. `HEXSTRIKE_SSL=0` forces plain HTTP. When TLS is active,
+> use `https://` and trust the (self-signed) certificate instead of disabling
+> verification:
+>
+> ```bash
+> curl --cacert ~/.hexstrike/certs/server.crt https://localhost:8888/health
+> ```
+
 ### Web UI
 
-Open `http://localhost:8888/` in a browser for the console dashboard: live
+Open the server root in a browser — `http://localhost:8888/`, or
+`https://localhost:8888/` when TLS is enabled (accept the one-time warning
+for the self-signed certificate) — for the console dashboard: live
 process monitor, toolchain status, and a method-aware API explorer that can
 call any endpoint (path params and JSON bodies prompted for) and show its
 response. The JSON service index that used to live at `/` is now served at
@@ -237,8 +250,11 @@ Edit `~/.config/Claude/claude_desktop_config.json`:
       "args": [
         "/path/to/hexstrike-ai/hexstrike_mcp.py",
         "--server",
-        "http://localhost:8888"
+        "https://localhost:8888"
       ],
+      "env": {
+        "REQUESTS_CA_BUNDLE": "/path/to/.hexstrike/certs/server.crt"
+      },
       "description": "HexStrike AI v6.0 - Advanced Cybersecurity Automation Platform",
       "timeout": 300,
       "disabled": false
@@ -246,6 +262,9 @@ Edit `~/.config/Claude/claude_desktop_config.json`:
   }
 }
 ```
+
+> Running without TLS (`HEXSTRIKE_SSL=0` or no certificate present)? Point
+> `--server` at `http://localhost:8888` and drop the `env` block.
 
 ### VS Code Copilot Integration
 
@@ -259,8 +278,11 @@ Configure VS Code settings in `.vscode/settings.json`:
       "args": [
         "/path/to/hexstrike-ai/hexstrike_mcp.py",
         "--server",
-        "http://localhost:8888"
-      ]
+        "https://localhost:8888"
+      ],
+      "env": {
+        "REQUESTS_CA_BUNDLE": "/path/to/.hexstrike/certs/server.crt"
+      }
     }
   },
   "inputs": []
