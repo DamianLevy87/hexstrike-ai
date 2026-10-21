@@ -140,7 +140,7 @@ DEFAULT_TOOL_CHAINS: Dict[str, Dict[str, Any]] = {
                        "extra params: username and password.",
         "target_type": "ip",
         "tags": ["creds", "active"],
-        "requires_params": ["username", "password"],
+        "requires_params": ["username", "password", "service"],
         "steps": [
             {"tool": "hydra",
              "params": {"target": "{target}", "service": "{param.service}",
