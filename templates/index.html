@@ -27,7 +27,7 @@ main{max-width:1180px;margin:0 auto;padding:22px}
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:22px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
 .card .k{color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:1px}
-.card .v{font-size:22px;margin-top:4px}
+.card .v{font-size:20px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .card .v.ok{color:var(--green)} .card .v.warn{color:var(--amber)} .card .v.bad{color:var(--accent)}
 .meter{height:6px;background:#262a35;border-radius:4px;margin-top:8px;overflow:hidden}
 .meter>i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--amber));transition:width .4s}
@@ -148,7 +148,7 @@ async function loadHealth() {
       card('Status', esc(h.status), h.status === 'healthy' ? 'ok' : 'bad') +
       card('Cache hit rate', esc((h.cache_stats || {}).hit_rate || '–')) +
       card('Commands run', ((h.telemetry || {}).commands_executed ?? '–')) +
-      card('Success rate', ((h.telemetry || {}).success_rate != null) ? (100 * h.telemetry.success_rate).toFixed(1) + '%' : '–');
+      card('Success rate', esc(((h.telemetry || {}).success_rate) ?? '–'));
     return true;
   } catch (e) {
     $('#statusPill').textContent = 'unreachable'; $('#statusPill').className = 'pill bad';
@@ -217,6 +217,7 @@ function renderEndpoints() {
   ).join('') || '<div class="empty">no endpoints match</div>';
 }
 $('#q').addEventListener('input', renderEndpoints);
+$('#q').addEventListener('search', renderEndpoints);
 $('#eplist').addEventListener('click', e => {
   const p = e.target.dataset && e.target.dataset.p;
   if (p) runEndpoint(p);
