@@ -243,7 +243,7 @@ single tool calls:
 
 - **Tool chains** — named, ordered sequences of API tool calls with
   parameter templating (`{target}`, `{param.X}`). Defaults: `recon-passive`,
-  `port-scan`, `web-content-discovery`, `vuln-scan`, `web-audit`,
+  `port-scan`, `web-content-discovery`, `web-content-discovery-insecure` (self-signed/lab TLS), `vuln-scan`, `web-audit`,
   `cve-hunt`, `container-audit`, `credential-audit`, `full-recon`.
 - **Skills** — reusable capability bundles (tools + guidance):
   `network-recon`, `web-application-security`, `vulnerability-assessment`,

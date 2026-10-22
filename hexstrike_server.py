@@ -5670,16 +5670,36 @@ class ProcessManager:
             return None
 
     @staticmethod
+    def _snapshot(info):
+        """Serializable copy of a process entry — drops the live Popen handle.
+
+        The raw subprocess.Popen is not JSON serializable; including it made
+        /api/processes/list and /api/processes/status return 500 whenever a
+        process was registered (e.g. during a long scan). Callers only need
+        status/progress fields, never the handle.
+        """
+        if info is None:
+            return None
+        snap = {k: v for k, v in info.items() if k != "process"}
+        try:
+            proc = info.get("process")
+            snap["running"] = bool(proc and proc.poll() is None)
+        except Exception:
+            snap["running"] = False
+        return snap
+
+    @staticmethod
     def get_process_status(pid):
-        """Get status of a specific process"""
+        """Get status of a specific process (JSON-serializable snapshot)"""
         with process_lock:
-            return active_processes.get(pid, None)
+            return ProcessManager._snapshot(active_processes.get(pid, None))
 
     @staticmethod
     def list_active_processes():
-        """List all active processes"""
+        """List all active processes (JSON-serializable snapshots)"""
         with process_lock:
-            return dict(active_processes)
+            return {pid: ProcessManager._snapshot(info)
+                    for pid, info in active_processes.items()}
 
     @staticmethod
     def pause_process(pid):
@@ -12886,7 +12906,7 @@ def dirsearch():
         params = request.json
         url = params.get("url", "")
         extensions = params.get("extensions", "php,html,js,txt,xml,json")
-        wordlist = params.get("wordlist", "/usr/share/wordlists/dirsearch/common.txt")
+        wordlist = params.get("wordlist", "/usr/share/wordlists/dirb/common.txt")
         threads = params.get("threads", 30)
         recursive = params.get("recursive", False)
         additional_args = params.get("additional_args", "")

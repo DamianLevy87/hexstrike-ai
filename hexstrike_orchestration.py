@@ -89,6 +89,25 @@ DEFAULT_TOOL_CHAINS: Dict[str, Dict[str, Any]] = {
              "params": {"url": "{target}"}},
         ],
     },
+    "web-content-discovery-insecure": {
+        "description": "Directory discovery tolerant of self-signed or untrusted "
+                       "TLS certificates — local/lab targets only. dirsearch is "
+                       "optional (it needs REQUESTS_CA_BUNDLE in the server env "
+                       "since it has no cert-skip flag).",
+        "target_type": "url",
+        "tags": ["web", "discovery"],
+        "steps": [
+            {"tool": "feroxbuster",
+             "params": {"url": "{target}", "threads": 50,
+                        "additional_args": "--insecure"}},
+            {"tool": "gobuster",
+             "params": {"url": "{target}", "mode": "dir",
+                        "additional_args": "-k"}},
+            {"tool": "dirsearch",
+             "params": {"url": "{target}"},
+             "optional": True},
+        ],
+    },
     "vuln-scan": {
         "description": "WAF detection followed by template-based vulnerability "
                        "scanning (critical/high/medium severities).",

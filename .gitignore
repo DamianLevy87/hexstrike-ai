@@ -18,3 +18,4 @@ hexstrike.log
 # Tooling caches
 .cache/
 *.tmp
+reports/
